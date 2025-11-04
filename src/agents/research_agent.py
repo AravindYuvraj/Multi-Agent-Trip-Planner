@@ -14,12 +14,15 @@ from pydantic import BaseModel, Field
 
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
+from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import tool
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_tavily import TavilySearch
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
+from langchain.chat_models import init_chat_model
+
 
 # Import the main state definition
 try:
@@ -37,12 +40,26 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(name)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-RESEARCH_MODEL = os.getenv("RESEARCH_MODEL", "gpt-4o-mini")
-PARSER_MODEL = os.getenv("PARSER_MODEL", "gpt-4o-mini")
+# RESEARCH_MODEL = os.getenv("RESEARCH_MODEL", "gpt-4o-mini")
+# PARSER_MODEL = os.getenv("PARSER_MODEL", "gpt-4o-mini")
+# OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+GROQ_API_KEY=os.getenv("GROQ_API_KEY")
+
 
 if not TAVILY_API_KEY:
     raise ValueError("TAVILY_API_KEY environment variable not set.")
+
+# if not OPENAI_API_KEY:
+#     raise ValueError("OPENAI_API_KEY environment variable not set.")
+
+if not GROQ_API_KEY:
+    raise ValueError("GROQ_API_KEY environment variable not set.")
+
+llm = init_chat_model("groq:llama-3.1-8b-instant")
+
 
 # --- Tools Definition ---
 # Tools are defined with error handling to make the agent more resilient.
@@ -84,8 +101,7 @@ def research_agent_node(state: TravelPlanningState) -> Dict[str, Any]:
     logger.info(f"TripID {trip_id}: Research agent node running.")
     
     # First create the model, then bind tools, then add retry
-    model = ChatOpenAI(model=RESEARCH_MODEL, temperature=0.2)
-    agent_model = model.bind_tools(tools).with_retry(stop_after_attempt=3)
+    model = llm.bind_tools(tools).with_retry(stop_after_attempt=3)
     
     system_prompt = """You are an expert travel researcher, part of a multi-agent system. Your job is to use the provided tools to gather information for a travel plan.
 
@@ -111,7 +127,7 @@ Your final response should be a conversational summary of your findings.
     messages = [SystemMessage(content=prompt)] + state.get("messages", [])
 
     try:
-        response = agent_model.invoke(messages)
+        response = model.invoke(messages)
         logger.info(f"TripID {trip_id}: Research agent LLM invoked successfully.")
         return {"messages": [response]}
     except Exception as e:
@@ -142,15 +158,14 @@ def parse_research_output_node(state: TravelPlanningState) -> Dict[str, Any]:
         local_tips: List[str] = Field(..., description="List of local tips")
     
     # First create the model, then add structured output, then add retry
-    parser_model = ChatOpenAI(model=PARSER_MODEL, temperature=0)
-    structured_llm = parser_model.with_structured_output(ResearchOutput).with_retry(stop_after_attempt=3)
+    parser_model = llm.with_structured_output(ResearchOutput).with_retry(stop_after_attempt=3)
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", "You are a data parsing expert. Your task is to parse the provided text into a structured dictionary with keys: `attractions` (list of strings), `weather` (string), and `local_tips` (list of strings). Extract the relevant information from the text for each key."),
         ("user", "{text_to_parse}")
     ])
     
-    parser_chain = prompt | structured_llm
+    parser_chain = prompt | parser_model
     
     try:
         research_output = parser_chain.invoke({"text_to_parse": final_message})
@@ -200,10 +215,10 @@ if __name__ == '__main__':
 
     # Example initial state after orchestrator has run
     initial_state_data = {
-        'messages': [HumanMessage(content="I want to plan a 5 day trip to Kyoto, Japan next March. I'm interested in history and food.")],
+        'messages': [HumanMessage(content="I want to plan a 5 day trip to Kyoto, Japan this month November 2025. I'm interested in history and food.")],
         'destination': 'Kyoto, Japan',
-        'start_date': '2026-03-15',
-        'end_date': '2026-03-20',
+        'start_date': '2025-11-15',
+        'end_date': '2025-11-20',
         'num_travelers': 1,
         'interests': ['history', 'food', 'temples'],
         'requirements_extracted': True,

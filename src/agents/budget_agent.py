@@ -14,12 +14,14 @@ from datetime import datetime
 
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
+from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import tool
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_tavily import TavilySearch
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
+from langchain.chat_models import init_chat_model
 
 # Import the main state definition
 try:
@@ -37,12 +39,18 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(name)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-BUDGET_MODEL = os.getenv("BUDGET_MODEL", "gpt-4o-mini")
-PARSER_MODEL = os.getenv("PARSER_MODEL", "gpt-4o-mini")
+# BUDGET_MODEL = os.getenv("BUDGET_MODEL", "gpt-4o-mini")
+# PARSER_MODEL = os.getenv("PARSER_MODEL", "gpt-4o-mini")
+GROQ_API_KEY=os.getenv("GROQ_API_KEY")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 
 if not TAVILY_API_KEY:
     raise ValueError("TAVILY_API_KEY environment variable not set.")
+
+if not GROQ_API_KEY:
+    raise ValueError("GROQ_API_KEY environment variable not set.")
+
+llm = init_chat_model("groq:llama-3.1-8b-instant")
 
 # --- Tools Definition ---
 
@@ -54,7 +62,7 @@ def get_estimated_flight_cost(destination: str, start_date: str) -> str:
     logger.info(f"Tool 'get_estimated_flight_cost' called for {destination} around {start_date}")
     try:
         query = (f"What is the average or typical round-trip flight cost per person to {destination} "
-                 f"for a trip starting around {start_date}? Provide a single estimated cost in USD.")
+                 f"for a trip starting around {start_date}? Provide a single estimated cost in INR.")
         return TavilySearch(max_results=2).invoke({"query": query})
     except Exception as e:
         logger.error(f"Error in 'get_estimated_flight_cost' tool: {e}")
@@ -68,7 +76,7 @@ def get_estimated_accommodation_cost(destination: str, accommodation_preference:
     logger.info(f"Tool 'get_estimated_accommodation_cost' called for {destination} ({accommodation_preference})")
     try:
         query = (f"What is the average nightly cost for {accommodation_preference} accommodation in {destination} "
-                 f"suitable for {num_travelers} person(s)? Provide a single estimated cost in USD.")
+                 f"suitable for {num_travelers} person(s)? Provide a single estimated cost in INR.")
         return TavilySearch(max_results=2).invoke({"query": query})
     except Exception as e:
         logger.error(f"Error in 'get_estimated_accommodation_cost' tool: {e}")
@@ -86,8 +94,7 @@ def budget_agent_node(state: TravelPlanningState) -> Dict[str, Any]:
     trip_id = state.get('trip_id')
     logger.info(f"TripID {trip_id}: Budget agent node running.")
 
-    model = ChatOpenAI(model=BUDGET_MODEL, temperature=0.2)
-    agent_model = model.bind_tools(tools).with_retry(stop_after_attempt=3)
+    model = llm.bind_tools(tools).with_retry(stop_after_attempt=3)
 
     system_prompt = """You are an expert travel budget planner. Your goal is to create a sensible and realistic budget breakdown for a trip based on the user's total budget and preferences.
 
@@ -95,7 +102,7 @@ Current trip details:
 - Destination: {destination}
 - Dates: {start_date} to {end_date} ({num_days} days)
 - Travelers: {num_travelers}
-- Total Budget: ${total_budget}
+- Total Budget: {total_budget}
 - Accommodation Preference: {accommodation_preference}
 
 Your task is to:
@@ -122,8 +129,9 @@ Your task is to:
     messages = [SystemMessage(content=prompt)] + state.get("messages", [])
 
     try:
-        response = agent_model.invoke(messages)
+        response = model.invoke(messages)
         logger.info(f"TripID {trip_id}: Budget agent LLM invoked successfully.")
+        print(response)
         return {"messages": [response]}
     except Exception as e:
         logger.error(f"TripID {trip_id}: Error invoking budget agent model: {e}")
@@ -157,8 +165,7 @@ def parse_budget_output_node(state: TravelPlanningState) -> Dict[str, Any]:
         remaining: float = Field(..., description="Remaining budget after all allocations")
     
     # Create parser model with structured output and retry
-    parser_model = ChatOpenAI(model=PARSER_MODEL, temperature=0)
-    structured_llm = parser_model.with_structured_output(BudgetBreakdown).with_retry(stop_after_attempt=3)
+    parser_model = llm.with_structured_output(BudgetBreakdown).with_retry(stop_after_attempt=3)
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", """You are a data parsing expert. Your task is to parse the provided text into a structured dictionary.
@@ -167,27 +174,30 @@ Extract the final allocated budget number for each category from the text."""),
         ("user", "Please parse the following budget plan summary:\n\n{text_to_parse}")
     ])
     
-    parser_chain = prompt | structured_llm
+    parser_chain = prompt | parser_model
 
     try:
         budget_output = parser_chain.invoke({"text_to_parse": final_message})
         logger.info(f"TripID {trip_id}: Successfully parsed budget output into structured format.")
+
+        # output validation using model_validate_json method
+        budget_object = BudgetBreakdown.model_validate_json(budget_output)
         
         # Convert Pydantic model to dict for JSON serialization
         structured_output = {
-            "flights": budget_output.flights,
-            "accommodation": budget_output.accommodation,
-            "food": budget_output.food,
-            "activities": budget_output.activities,
-            "transport": budget_output.transport,
-            "total": budget_output.total,
-            "remaining": budget_output.remaining
+            "flights": budget_object.flights,
+            "accommodation": budget_object.accommodation,
+            "food": budget_object.food,
+            "activities": budget_object.activities,
+            "transport": budget_object.transport,
+            "total": budget_object.total,
+            "remaining": budget_object.remaining
         }
         
         # Add a confirmation message for the user
         confirmation_msg = (f"I've created a budget plan for your trip. We've allocated "
-                          f"${budget_output.flights:.2f} for flights and "
-                          f"${budget_output.accommodation:.2f} for accommodation. "
+                          f"${budget_object.flights:.2f} for flights and "
+                          f"${budget_object.accommodation:.2f} for accommodation. "
                           f"Now, let's find some flights!")
 
         return {
@@ -229,12 +239,12 @@ if __name__ == '__main__':
 
     # Example state after the Research Agent has run
     initial_state_data = {
-        'messages': [HumanMessage(content="My budget is $4000 total.")],
-        'destination': 'Kyoto, Japan',
-        'start_date': '2026-03-15',
-        'end_date': '2026-03-20', # 5 days
+        'messages': [HumanMessage(content="My budget is 5000 Rs total.")],
+        'destination': 'Delhi, India',
+        'start_date': '2025-11-15',
+        'end_date': '2025-11-20', # 5 days
         'num_travelers': 2,
-        'budget_total': 4000.0,
+        'budget_total': 5000.0,
         'accommodation_preference': 'budget hotel',
         'requirements_extracted': True,
         'research_results': {"attractions": [], "weather": "Mild and pleasant.", "local_tips": []},
