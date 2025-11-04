@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Travel Planner - Multi-Agent System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 3em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .main-card {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .input-section {
+            padding: 40px;
+            background: linear-gradient(to right, #f8f9fa, #e9ecef);
+        }
+
+        .input-wrapper {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .input-field {
+            flex: 1;
+            padding: 18px 24px;
+            font-size: 16px;
+            border: 2px solid #dee2e6;
+            border-radius: 12px;
+            outline: none;
+            transition: all 0.3s;
+        }
+
+        .input-field:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .btn-plan {
+            padding: 18px 40px;
+            font-size: 16px;
+            font-weight: 600;
+            color: white;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-plan:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+
+        .btn-plan:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .examples {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .example-btn {
+            padding: 8px 16px;
+            font-size: 14px;
+            color: #667eea;
+            background: white;
+            border: 1px solid #667eea;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .example-btn:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .progress-section {
+            padding: 30px 40px;
+            background: #f8f9fa;
+            border-top: 1px solid #dee2e6;
+            display: none;
+        }
+
+        .progress-section.active {
+            display: block;
+        }
+
+        .agent-status {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 15px;
+            margin-bottom: 10px;
+            background: white;
+            border-radius: 10px;
+            border-left: 4px solid #dee2e6;
+            transition: all 0.3s;
+        }
+
+        .agent-status.active {
+            border-left-color: #667eea;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+        }
+
+        .agent-status.complete {
+            border-left-color: #28a745;
+        }
+
+        .agent-icon {
+            font-size: 24px;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background: #f8f9fa;
+        }
+
+        .agent-status.active .agent-icon {
+            background: #667eea;
+            color: white;
+            animation: pulse 1.5s infinite;
+        }
+
+        .agent-status.complete .agent-icon {
+            background: #28a745;
+            color: white;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .agent-info {
+            flex: 1;
+        }
+
+        .agent-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 3px;
+        }
+
+        .agent-message {
+            font-size: 14px;
+            color: #6c757d;
+        }
+
+        .results-section {
+            padding: 40px;
+            display: none;
+        }
+
+        .results-section.active {
+            display: block;
+        }
+
+        .result-card {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 20px;
+        }
+
+        .result-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 15px;
+        }
+
+        .result-icon {
+            font-size: 28px;
+        }
+
+        .result-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .result-content {
+            padding-left: 40px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .info-item {
+            background: white;
+            padding: 12px;
+            border-radius: 8px;
+        }
+
+        .info-label {
+            font-size: 12px;
+            color: #6c757d;
+            margin-bottom: 4px;
+        }
+
+        .info-value {
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .itinerary-day {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+        }
+
+        .day-title {
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 8px;
+        }
+
+        .day-activities {
+            padding-left: 15px;
+            color: #495057;
+            font-size: 14px;
+        }
+
+        .cost-summary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 12px;
+            margin-top: 20px;
+        }
+
+        .cost-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .cost-total {
+            font-size: 24px;
+            font-weight: 700;
+            margin-top: 10px;
+        }
+
+        .loader {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: #dc3545;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌍 AI Travel Planner</h1>
+            <p>Multi-Agent System powered by LangGraph</p>
+        </div>
+
+        <div class="main-card">
+            <!-- Input Section -->
+            <div class="input-section">
+                <div class="input-wrapper">
+                    <input 
+                        type="text" 
+                        id="tripQuery" 
+                        class="input-field" 
+                        placeholder="E.g., Plan a 5-day trip to Tokyo for 2 people, budget $3000, interested in culture and food"
+                    >
+                    <button id="planBtn" class="btn-plan">
+                        Plan My Trip ✈️
+                    </button>
+                </div>
+                
+                <div class="examples">
+                    <span style="color: #6c757d; margin-right: 10px;">Examples:</span>
+                    <button class="example-btn" onclick="setExample('Plan a romantic 7-day trip to Paris for 2 people, budget $5000, interested in art and cuisine')">Paris Romance</button>
+                    <button class="example-btn" onclick="setExample('Plan a family trip to Orlando for 5 days, 4 people, budget $4000, interested in theme parks')">Family Orlando</button>
+                    <button class="example-btn" onclick="setExample('Plan a solo backpacking trip to Thailand for 10 days, budget $1500, interested in beaches and adventure')">Thailand Adventure</button>
+                </div>
+            </div>
+
+            <!-- Progress Section -->
+            <div id="progressSection" class="progress-section">
+                <div id="orchestratorStatus" class="agent-status">
+                    <div class="agent-icon">🎯</div>
+                    <div class="agent-info">
+                        <div class="agent-name">Orchestrator Agent</div>
+                        <div class="agent-message">Analyzing your request...</div>
+                    </div>
+                </div>
+                
+                <div id="researchStatus" class="agent-status">
+                    <div class="agent-icon">🔍</div>
+                    <div class="agent-info">
+                        <div class="agent-name">Research Agent</div>
+                        <div class="agent-message">Researching destination...</div>
+                    </div>
+                </div>
+                
+                <div id="budgetStatus" class="agent-status">
+                    <div class="agent-icon">💰</div>
+                    <div class="agent-info">
+                        <div class="agent-name">Budget Agent</div>
+                        <div class="agent-message">Allocating budget...</div>
+                    </div>
+                </div>
+                
+                <div id="bookingStatus" class="agent-status">
+                    <div class="agent-icon">✈️</div>
+                    <div class="agent-info">
+                        <div class="agent-name">Booking Agent</div>
+                        <div class="agent-message">Searching flights and hotels...</div>
+                    </div>
+                </div>
+                
+                <div id="itineraryStatus" class="agent-status">
+                    <div class="agent-icon">📅</div>
+                    <div class="agent-info">
+                        <div class="agent-name">Itinerary Agent</div>
+                        <div class="agent-message">Creating your itinerary...</div>
+                    </div>
+                </div>
+                
+                <div id="synthesizerStatus" class="agent-status">
+                    <div class="agent-icon">✨</div>
+                    <div class="agent-info">
+                        <div class="agent-name">Synthesizer Agent</div>
+                        <div class="agent-message">Finalizing your travel plan...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results Section -->
+            <div id="resultsSection" class="results-section">
+                <div id="errorMessage" class="error-message" style="display: none;"></div>
+                
+                <div class="result-card">
+                    <div class="result-header">
+                        <span class="result-icon">🎉</span>
+                        <span class="result-title">Your Travel Plan is Ready!</span>
+                    </div>
+                    <div class="result-content" id="tripSummary"></div>
+                </div>
+
+                <div class="result-card">
+                    <div class="result-header">
+                        <span class="result-icon">✈️</span>
+                        <span class="result-title">Flight & Accommodation</span>
+                    </div>
+                    <div class="result-content" id="bookingDetails"></div>
+                </div>
+
+                <div class="result-card">
+                    <div class="result-header">
+                        <span class="result-icon">📅</span>
+                        <span class="result-title">Your Itinerary</span>
+                    </div>
+                    <div class="result-content" id="itineraryDetails"></div>
+                </div>
+
+                <div class="cost-summary" id="costSummary"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        
+        let currentPlan = null;
+
+        // Set example query
+        function setExample(text) {
+            document.getElementById('tripQuery').value = text;
+        }
+
+        // Initialize
+        document.getElementById('planBtn').addEventListener('click', planTrip);
+        document.getElementById('tripQuery').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') planTrip();
+        });
+
+        // Main planning function
+        async function planTrip() {
+            const query = document.getElementById('tripQuery').value.trim();
+            
+            if (!query) {
+                alert('Please enter your travel request');
+                return;
+            }
+
+            // Reset UI
+            resetUI();
+            
+            // Show progress
+            document.getElementById('progressSection').classList.add('active');
+            document.getElementById('planBtn').disabled = true;
+            document.getElementById('planBtn').innerHTML = '<span class="loader"></span> Planning...';
+
+            try {
+                // Use WebSocket for real-time updates (fallback to HTTP if needed)
+                await planWithWebSocket(query);
+            } catch (error) {
+                console.error('WebSocket failed, falling back to HTTP:', error);
+                await planWithHTTP(query);
+            }
+        }
+
+        // WebSocket implementation
+        async function planWithWebSocket(query) {
+            return new Promise((resolve, reject) => {
+                const ws = new WebSocket('ws://localhost:8000/ws/plan-trip');
+                
+                ws.onopen = () => {
+                    ws.send(JSON.stringify({ query }));
+                };
+
+                ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.type === 'update') {
+                        updateAgentStatus(data.node, 'active');
+                        if (data.messages && data.messages.length > 0) {
+                            updateAgentMessage(data.node, data.messages[data.messages.length - 1]);
+                        }
+                    } else if (data.type === 'complete') {
+                        displayResults(data.plan);
+                        resolve();
+                    } else if (data.type === 'error') {
+                        showError(data.message);
+                        reject(new Error(data.message));
+                    }
+                };
+
+                ws.onerror = (error) => {
+                    reject(error);
+                };
+
+                ws.onclose = () => {
+                    document.getElementById('planBtn').disabled = false;
+                    document.getElementById('planBtn').innerHTML = 'Plan My Trip ✈️';
+                };
+            });
+        }
+
+        // HTTP fallback
+        async function planWithHTTP(query) {
+            try {
+                // Simulate agent progress
+                const agents = ['orchestrator', 'research', 'budget', 'booking', 'itinerary', 'synthesizer'];
+                let currentIndex = 0;
+                
+                const progressInterval = setInterval(() => {
+                    if (currentIndex < agents.length) {
+                        if (currentIndex > 0) {
+                            updateAgentStatus(agents[currentIndex - 1], 'complete');
+                        }
+                        updateAgentStatus(agents[currentIndex], 'active');
+                        currentIndex++;
+                    }
+                }, 1000);
+
+                const response = await fetch(`${API_BASE}/plan-trip`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ query })
+                });
+
+                clearInterval(progressInterval);
+
+                if (!response.ok) {
+                    throw new Error('Planning failed');
+                }
+
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    // Mark all complete
+                    agents.forEach(agent => updateAgentStatus(agent, 'complete'));
+                    displayResults(data.plan);
+                } else {
+                    showError(data.messages.join(', '));
+                }
+
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                document.getElementById('planBtn').disabled = false;
+                document.getElementById('planBtn').innerHTML = 'Plan My Trip ✈️';
+            }
+        }
+
+        // Update agent status
+        function updateAgentStatus(agent, status) {
+            const element = document.getElementById(`${agent}Status`);
+            if (element) {
+                element.classList.remove('active', 'complete');
+                if (status) {
+                    element.classList.add(status);
+                }
+            }
+        }
+
+        // Update agent message
+        function updateAgentMessage(agent, message) {
+            const element = document.getElementById(`${agent}Status`);
+            if (element) {
+                const messageEl = element.querySelector('.agent-message');
+                if (messageEl) {
+                    messageEl.textContent = message;
+                }
+            }
+        }
+
+        // Display results
+        function displayResults(plan) {
+            currentPlan = plan;
+            
+            // Show results section
+            document.getElementById('resultsSection').classList.add('active');
+            document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+
+            // Trip Summary
+            const summaryHTML = `
+                <div class="info-grid">
+                    <div class="info-item">
+                        <div class="info-label">Destination</div>
+                        <div class="info-value">${plan.destination}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Dates</div>
+                        <div class="info-value">${plan.dates.start} to ${plan.dates.end}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Travelers</div>
+                        <div class="info-value">${plan.travelers} people</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Weather</div>
+                        <div class="info-value">${plan.research?.weather?.forecast || 'N/A'}</div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('tripSummary').innerHTML = summaryHTML;
+
+            // Booking Details
+            const bookingHTML = `
+                <h4 style="margin-bottom: 15px;">✈️ Selected Flight</h4>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <div class="info-label">Airline</div>
+                        <div class="info-value">${plan.flight.airline}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Duration</div>
+                        <div class="info-value">${plan.flight.duration}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Stops</div>
+                        <div class="info-value">${plan.flight.stops} stop(s)</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Price</div>
+                        <div class="info-value">$${plan.flight.price_per_person}/person</div>
+                    </div>
+                </div>
+
+                <h4 style="margin: 25px 0 15px;">🏨 Selected Hotel</h4>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <div class="info-label">Hotel</div>
+                        <div class="info-value">${plan.hotel.name}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Location</div>
+                        <div class="info-value">${plan.hotel.location}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Rating</div>
+                        <div class="info-value">⭐ ${plan.hotel.rating}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Price</div>
+                        <div class="info-value">$${plan.hotel.price_per_night}/night</div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('bookingDetails').innerHTML = bookingHTML;
+
+            // Itinerary
+            let itineraryHTML = '';
+            Object.entries(plan.itinerary).forEach(([day, activities]) => {
+                const dayNum = day.split('_')[1];
+                itineraryHTML += `
+                    <div class="itinerary-day">
+                        <div class="day-title">Day ${dayNum}</div>
+                        <div class="day-activities">
+                            🌅 Morning: ${activities.morning}<br>
+                            ☀️ Afternoon: ${activities.afternoon}<br>
+                            ${activities.evening ? `🌙 Evening: ${activities.evening}` : ''}
+                        </div>
+                    </div>
+                `;
+            });
+            document.getElementById('itineraryDetails').innerHTML = itineraryHTML;
+
+            // Cost Summary
+            const costs = plan.costs;
+            const costHTML = `
+                <div class="cost-row">
+                    <span>Flights</span>
+                    <span>$${costs.flights.toFixed(2)}</span>
+                </div>
+                <div class="cost-row">
+                    <span>Accommodation</span>
+                    <span>$${costs.accommodation.toFixed(2)}</span>
+                </div>
+                <div class="cost-row">
+                    <span>Activities</span>
+                    <span>$${costs.activities.toFixed(2)}</span>
+                </div>
+                <div class="cost-row">
+                    <span>Food & Dining</span>
+                    <span>$${costs.food.toFixed(2)}</span>
+                </div>
+                <div class="cost-total">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>Total Estimated Cost</span>
+                        <span>$${costs.total.toFixed(2)}</span>
+                    </div>
+                    <div style="font-size: 14px; margin-top: 8px; opacity: 0.9;">
+                        Budget Remaining: $${plan.budget_status.remaining.toFixed(2)}
+                    </div>
+                </div>
+            `;
+            document.getElementById('costSummary').innerHTML = costHTML;
+        }
+
+        // Show error
+        function showError(message) {
+            const errorEl = document.getElementById('errorMessage');
+            errorEl.textContent = '❌ ' + message;
+            errorEl.style.display = 'block';
+            document.getElementById('resultsSection').classList.add('active');
+        }
+
+        // Reset UI
+        function resetUI() {
+            document.getElementById('progressSection').classList.remove('active');
+            document.getElementById('resultsSection').classList.remove('active');
+            document.getElementById('errorMessage').style.display = 'none';
+            
+            const agents = ['orchestrator', 'research', 'budget', 'booking', 'itinerary', 'synthesizer'];
+            agents.forEach(agent => {
+                updateAgentStatus(agent, null);
+            });
+        }
+    </script>
+</body>
+</html>
